@@ -106,6 +106,17 @@ class UnavailableDayListCreate(generics.ListCreateAPIView):
     def perform_create(self, serializer):
         serializer.save()
 
+@api_view(['DELETE'])
+@permission_classes([permissions.IsAdminUser])
+def remove_unavailable_day(request, pk):
+    try:
+        unavailable_day = UnavailableDay.objects.get(pk=pk)
+        unavailable_day.delete()
+        return Response({'message': 'Unavailable day removed'}, status=status.HTTP_200_OK)
+    except UnavailableDay.DoesNotExist:
+        return Response({'error': 'Unavailable day not found'}, status=status.HTTP_404_NOT_FOUND)
+
+
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def check_superuser(request):
