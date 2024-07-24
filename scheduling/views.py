@@ -98,6 +98,44 @@ def deny_appointment(request, pk):
     except Appointment.DoesNotExist:
         return Response({'error': 'Appointment not found'}, status=status.HTTP_404_NOT_FOUND)
 
+@api_view(['POST'])
+@permission_classes([permissions.IsAdminUser])
+def flag_appointment(request, pk):
+    try:
+        appointment = Appointment.objects.get(pk=pk)
+        appointment.status = 'flagged'
+        appointment.save()
+        send_mail(
+            'Appointment Flagged',
+            f'Your appointment on {appointment.date} has been flagged for review.',
+            'your-email@gmail.com',
+            [appointment.user.email],
+            fail_silently=False,
+        )
+        serializer = AppointmentSerializer(appointment)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    except Appointment.DoesNotExist:
+        return Response({'error': 'Appointment not found'}, status=status.HTTP_404_NOT_FOUND)
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAdminUser])
+def mark_to_completion(request, pk):
+    try:
+        appointment = Appointment.objects.get(pk=pk)
+        appointment.status = 'to_completion'
+        appointment.save()
+        send_mail(
+            'Appointment Completed',
+            f'Your appointment on {appointment.date} has been marked as completed.',
+            'your-email@gmail.com',
+            [appointment.user.email],
+            fail_silently=False,
+        )
+        serializer = AppointmentSerializer(appointment)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    except Appointment.DoesNotExist:
+        return Response({'error': 'Appointment not found'}, status=status.HTTP_404_NOT_FOUND)
+
 class UnavailableDayListCreate(generics.ListCreateAPIView):
     queryset = UnavailableDay.objects.all()
     serializer_class = UnavailableDaySerializer
@@ -115,7 +153,6 @@ def remove_unavailable_day(request, pk):
         return Response({'message': 'Unavailable day removed'}, status=status.HTTP_200_OK)
     except UnavailableDay.DoesNotExist:
         return Response({'error': 'Unavailable day not found'}, status=status.HTTP_404_NOT_FOUND)
-
 
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
