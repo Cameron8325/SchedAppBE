@@ -1,6 +1,7 @@
 from rest_framework import generics, status, permissions
 from rest_framework.response import Response
 from django.core.mail import send_mail
+from django.db import IntegrityError
 from .models import Appointment, AvailableDay
 from .serializers import AppointmentSerializer, AvailableDaySerializer
 from rest_framework.decorators import api_view, permission_classes
@@ -152,13 +153,12 @@ def set_availability(request):
         end_date_str = request.data.get('end_date')
         reason = request.data.get('reason', '')
 
-        if not start_date_str or not end_date_str:
-            return Response({'error': 'Start date and end date are required'}, status=status.HTTP_400_BAD_REQUEST)
+        if not start_date_str:
+            return Response({'error': 'Start date is required'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            # Parse the date string into a date object
             start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
-            end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+            end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date() if end_date_str else start_date
         except ValueError:
             return Response({'error': 'Invalid date format. Use YYYY-MM-DD.'}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -182,8 +182,8 @@ def set_availability(request):
 @permission_classes([permissions.IsAdminUser])
 def remove_available_days(request):
     try:
-        start_date_str = request.data.get('start_date')
-        end_date_str = request.data.get('end_date')
+        start_date_str = request.query_params.get('start_date')
+        end_date_str = request.query_params.get('end_date')
 
         if not start_date_str or not end_date_str:
             return Response({'error': 'Start date and end date are required'}, status=status.HTTP_400_BAD_REQUEST)
@@ -197,13 +197,16 @@ def remove_available_days(request):
         if start_date > end_date:
             return Response({'error': 'Start date must be before end date'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Delete all AvailableDay records in the date range
         AvailableDay.objects.filter(date__gte=start_date, date__lte=end_date).delete()
 
         return Response({'message': f'Available days removed for range {start_date_str} - {end_date_str}'}, status=status.HTTP_200_OK)
     except Exception as e:
         print(f"Error in remove_available_days: {e}")
         return Response({'error': f'Internal Server Error: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+
+
 
 
 @api_view(['GET'])
