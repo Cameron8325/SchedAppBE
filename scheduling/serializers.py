@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Appointment, UnavailableDay
+from .models import Appointment, AvailableDay
 from users.serializers import UserSerializer  # Import the UserSerializer
 
 class AppointmentSerializer(serializers.ModelSerializer):
@@ -13,7 +13,7 @@ class AppointmentSerializer(serializers.ModelSerializer):
     def get_status_display(self, obj):
         return obj.get_status_display()
 
-class UnavailableDaySerializer(serializers.ModelSerializer):
+class AvailableDaySerializer(serializers.ModelSerializer):
     class Meta:
-        model = UnavailableDay
+        model = AvailableDay
         fields = '__all__'

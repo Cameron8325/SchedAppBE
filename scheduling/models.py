@@ -17,10 +17,9 @@ class Appointment(models.Model):
     def __str__(self):
         return f"{self.user.username} - {self.date} - {self.status}"
 
-
-class UnavailableDay(models.Model):
+class AvailableDay(models.Model):
     date = models.DateField(unique=True)
     reason = models.CharField(max_length=255, blank=True, null=True)
 
     def __str__(self):
-        return f"{self.date} - {self.reason if self.reason else 'Unavailable'}"
+        return f"{self.date} - {self.reason if self.reason else 'Available'}"
