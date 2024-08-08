@@ -151,10 +151,10 @@ def set_availability(request):
     try:
         start_date_str = request.data.get('start_date')
         end_date_str = request.data.get('end_date')
-        reason = request.data.get('reason', '')
+        day_type = request.data.get('type')
 
-        if not start_date_str:
-            return Response({'error': 'Start date is required'}, status=status.HTTP_400_BAD_REQUEST)
+        if not start_date_str or not day_type:
+            return Response({'error': 'Start date and type are required'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
@@ -169,7 +169,7 @@ def set_availability(request):
         while current_date <= end_date:
             AvailableDay.objects.update_or_create(
                 date=current_date,
-                defaults={'reason': reason}
+                defaults={'type': day_type}
             )
             current_date += timedelta(days=1)
 
