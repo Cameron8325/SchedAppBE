@@ -26,19 +26,27 @@ class AppointmentListCreate(generics.ListCreateAPIView):
             
             if existing_appointments_count >= 4:
                 return Response({'error': 'No slots left for this day'}, status=status.HTTP_400_BAD_REQUEST)
-            
+
+            # Get the day type from the AvailableDay model
+            try:
+                available_day = AvailableDay.objects.get(date=parsed_date)
+                day_type = available_day.type
+            except AvailableDay.DoesNotExist:
+                return Response({'error': 'This day is not available for appointments'}, status=status.HTTP_400_BAD_REQUEST)
+
             spots_left = 4 - existing_appointments_count
 
             appointment = Appointment.objects.create(
                 user_id=user_id,
                 date=parsed_date,
+                day_type=day_type,
                 status='pending',
                 spots_left=spots_left
             )
             
             send_mail(
                 'Appointment Request',
-                f'Your appointment on {appointment.date} is pending approval.',
+                f'Your appointment on {appointment.date} ({appointment.get_day_type_display()}) is pending approval.',
                 'your-email@gmail.com',
                 [appointment.user.email],
                 fail_silently=False,

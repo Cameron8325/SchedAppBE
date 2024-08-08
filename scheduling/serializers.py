@@ -5,6 +5,7 @@ from users.serializers import UserSerializer  # Import the UserSerializer
 class AppointmentSerializer(serializers.ModelSerializer):
     user = UserSerializer(read_only=True)  # Include the full UserSerializer
     status_display = serializers.SerializerMethodField()
+    day_type_display = serializers.SerializerMethodField()
 
     class Meta:
         model = Appointment
@@ -12,6 +13,9 @@ class AppointmentSerializer(serializers.ModelSerializer):
 
     def get_status_display(self, obj):
         return obj.get_status_display()
+
+    def get_day_type_display(self, obj):
+        return obj.get_day_type_display()
 
 class AvailableDaySerializer(serializers.ModelSerializer):
     class Meta:

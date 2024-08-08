@@ -1,24 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import User
 
-class Appointment(models.Model):
-    STATUS_CHOICES = [
-        ('pending', 'Pending'),
-        ('confirmed', 'Confirmed'),
-        ('denied', 'Denied'),
-        ('flagged', 'Flagged'),
-        ('to_completion', 'To Completion'),
-    ]
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
-    date = models.DateField()
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
-    spots_left = models.IntegerField(default=4)
-
-    def __str__(self):
-        return f"{self.user.username} - {self.date} - {self.status}"
-
-from django.db import models
-
 class AvailableDay(models.Model):
     DAY_TYPES = [
         ("tea_tasting", "Tea Tasting"),
@@ -31,3 +13,19 @@ class AvailableDay(models.Model):
     def __str__(self):
         return f"{self.date} - {self.get_type_display() if self.type else 'Available'}"
 
+class Appointment(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('confirmed', 'Confirmed'),
+        ('denied', 'Denied'),
+        ('flagged', 'Flagged'),
+        ('to_completion', 'To Completion'),
+    ]
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    date = models.DateField()
+    day_type = models.CharField(max_length=20, choices=AvailableDay.DAY_TYPES, default='tea_tasting')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    spots_left = models.IntegerField(default=4)
+
+    def __str__(self):
+        return f"{self.user.username} - {self.date} - {self.status}"
