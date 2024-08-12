@@ -212,11 +212,6 @@ def remove_available_days(request):
         print(f"Error in remove_available_days: {e}")
         return Response({'error': f'Internal Server Error: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-
-
-
-
-
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def check_superuser(request):
