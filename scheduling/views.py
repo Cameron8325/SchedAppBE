@@ -133,6 +133,11 @@ def mark_to_completion(request, pk):
         appointment = Appointment.objects.get(pk=pk)
         appointment.status = 'to_completion'
         appointment.save()
+
+        profile = appointment.user.profile
+        profile.tokens += 1
+        profile.save()
+
         send_mail(
             'Appointment Completed',
             f'Your appointment on {appointment.date} has been marked as completed.',
