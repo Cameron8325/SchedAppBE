@@ -131,8 +131,9 @@ def flag_appointment(request, pk):
 def mark_to_completion(request, pk):
     try:
         appointment = Appointment.objects.get(pk=pk)
-        appointment.status = 'to_completion'
-        appointment.save()
+        if appointment.status != 'to_completion':
+            appointment.status = 'to_completion'
+            appointment.save()
 
         profile = appointment.user.profile
         profile.tokens += 1
@@ -216,6 +217,18 @@ def remove_available_days(request):
     except Exception as e:
         print(f"Error in remove_available_days: {e}")
         return Response({'error': f'Internal Server Error: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def user_flag_appointment(request, pk):
+    try:
+        appointment = Appointment.objects.get(pk=pk, user=request.user)
+        appointment.status = 'flagged'
+        appointment.save()
+        return Response({'message': 'Appointment flagged'}, status=status.HTTP_200_OK)
+    except Appointment.DoesNotExist:
+        return Response({'error': 'Appointment not found'}, status=status.HTTP_404_NOT_FOUND)
+
 
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
