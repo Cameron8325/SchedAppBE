@@ -6,6 +6,8 @@ class AppointmentSerializer(serializers.ModelSerializer):
     user = UserSerializer(read_only=True)  # Include the full UserSerializer
     status_display = serializers.SerializerMethodField()
     day_type_display = serializers.SerializerMethodField()
+    reason = serializers.CharField(allow_blank=True, allow_null=True, required=False)
+
 
     class Meta:
         model = Appointment

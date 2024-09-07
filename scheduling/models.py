@@ -26,6 +26,7 @@ class Appointment(models.Model):
     day_type = models.CharField(max_length=20, choices=AvailableDay.DAY_TYPES, default='tea_tasting')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     spots_left = models.IntegerField(default=4)
+    reason = models.CharField(max_length=255, blank=True, null=True)
 
     def __str__(self):
         return f"{self.user.username} - {self.date} - {self.status}"

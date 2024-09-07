@@ -106,25 +106,39 @@ def deny_appointment(request, pk):
         return Response({'message': 'Appointment denied'}, status=status.HTTP_200_OK)
     except Appointment.DoesNotExist:
         return Response({'error': 'Appointment not found'}, status=status.HTTP_404_NOT_FOUND)
-
+        
+import json
 @api_view(['POST'])
-@permission_classes([permissions.IsAdminUser])
 def flag_appointment(request, pk):
     try:
         appointment = Appointment.objects.get(pk=pk)
-        appointment.status = 'flagged'
-        appointment.save()
-        send_mail(
-            'Appointment Flagged',
-            f'Your appointment on {appointment.date} has been flagged for review.',
-            'your-email@gmail.com',
-            [appointment.user.email],
-            fail_silently=False,
-        )
-        serializer = AppointmentSerializer(appointment)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        reason = request.data.get('reason', '')  # Get the reason from the request
+
+        print(f"Received reason: {reason}")  # Debug print statement
+
+        if reason:
+            appointment.reason = reason  # Store the reason in the appointment model
+            appointment.status = 'flagged'
+            appointment.save()
+
+            # Send notification email to the user
+            send_mail(
+                'Appointment Flagged',
+                f'Your appointment on {appointment.date} has been flagged for review with the reason: {reason}.',
+                'your-email@gmail.com',
+                [appointment.user.email],
+                fail_silently=False,
+            )
+
+            serializer = AppointmentSerializer(appointment)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        else:
+            return Response({'error': 'Reason for flagging is required'}, status=status.HTTP_400_BAD_REQUEST)
+
     except Appointment.DoesNotExist:
         return Response({'error': 'Appointment not found'}, status=status.HTTP_404_NOT_FOUND)
+
+
 
 @api_view(['POST'])
 @permission_classes([permissions.IsAdminUser])
