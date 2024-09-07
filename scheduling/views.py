@@ -67,6 +67,7 @@ def approve_appointment(request, pk):
     try:
         appointment = Appointment.objects.get(pk=pk)
         appointment.status = 'confirmed'
+        appointment.reason = ''  # Clear the reason field
         appointment.save()
         send_mail(
             'Appointment Confirmed',
@@ -79,6 +80,7 @@ def approve_appointment(request, pk):
         return Response(serializer.data, status=status.HTTP_200_OK)
     except Appointment.DoesNotExist:
         return Response({'error': 'Appointment not found'}, status=status.HTTP_404_NOT_FOUND)
+
 
 @api_view(['POST'])
 @permission_classes([permissions.IsAdminUser])
