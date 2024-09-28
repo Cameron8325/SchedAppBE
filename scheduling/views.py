@@ -1,29 +1,35 @@
 from rest_framework import generics, status, permissions
 from rest_framework.response import Response
 from django.core.mail import send_mail
-from django.db import IntegrityError
 from .models import Appointment, AvailableDay
 from .serializers import AppointmentSerializer, AvailableDaySerializer
 from rest_framework.decorators import api_view, permission_classes
 from datetime import datetime, timedelta
 from .permissions import IsAdminOrReadOnly
 
+
 class AppointmentListCreate(generics.ListCreateAPIView):
     queryset = Appointment.objects.all()
     serializer_class = AppointmentSerializer
-    permission_classes = [permissions.IsAuthenticated]
+
+    def get_permissions(self):
+        if self.request.method == 'GET':
+            # Allow anyone to view appointments
+            return [permissions.AllowAny()]
+        # Only authenticated users can create appointments (POST)
+        return [permissions.IsAuthenticated()]
 
     def create(self, request, *args, **kwargs):
         try:
             date = request.data.get('date')
             user_id = request.data.get('user')
-            
+
             if not date or not user_id:
                 return Response({'error': 'Date and user are required'}, status=status.HTTP_400_BAD_REQUEST)
-            
+
             parsed_date = datetime.strptime(date, '%Y-%m-%d').date()
             existing_appointments_count = Appointment.objects.filter(date=parsed_date).count()
-            
+
             if existing_appointments_count >= 4:
                 return Response({'error': 'No slots left for this day'}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -43,7 +49,7 @@ class AppointmentListCreate(generics.ListCreateAPIView):
                 status='pending',
                 spots_left=spots_left
             )
-            
+
             send_mail(
                 'Appointment Request',
                 f'Your appointment on {appointment.date} ({appointment.get_day_type_display()}) is pending approval.',
@@ -61,6 +67,16 @@ class AppointmentListCreate(generics.ListCreateAPIView):
             print("Error in create appointment:", str(e))
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+
+class AvailableDayListCreate(generics.ListCreateAPIView):
+    queryset = AvailableDay.objects.all()
+    serializer_class = AvailableDaySerializer
+    permission_classes = [IsAdminOrReadOnly]  # Apply the custom permission class
+
+    def perform_create(self, serializer):
+        serializer.save()
+
+
 @api_view(['POST'])
 @permission_classes([permissions.IsAdminUser])
 def approve_appointment(request, pk):
@@ -69,6 +85,7 @@ def approve_appointment(request, pk):
         appointment.status = 'confirmed'
         appointment.reason = ''  # Clear the reason field
         appointment.save()
+
         send_mail(
             'Appointment Confirmed',
             f'Your appointment on {appointment.date} has been confirmed.',
@@ -89,11 +106,11 @@ def deny_appointment(request, pk):
         appointment = Appointment.objects.get(pk=pk)
         date = appointment.date
         appointment.delete()
-        
+
         # Update the spots left
         existing_appointments_count = Appointment.objects.filter(date=date).count()
         spots_left = 4 - existing_appointments_count
-        
+
         # Update remaining appointments' spots_left
         Appointment.objects.filter(date=date).update(spots_left=spots_left)
 
@@ -104,19 +121,17 @@ def deny_appointment(request, pk):
             [appointment.user.email],
             fail_silently=False,
         )
-        
+
         return Response({'message': 'Appointment denied'}, status=status.HTTP_200_OK)
     except Appointment.DoesNotExist:
         return Response({'error': 'Appointment not found'}, status=status.HTTP_404_NOT_FOUND)
-        
-import json
+
+
 @api_view(['POST'])
 def flag_appointment(request, pk):
     try:
         appointment = Appointment.objects.get(pk=pk)
         reason = request.data.get('reason', '')  # Get the reason from the request
-
-        print(f"Received reason: {reason}")  # Debug print statement
 
         if reason:
             appointment.reason = reason  # Store the reason in the appointment model
@@ -139,7 +154,6 @@ def flag_appointment(request, pk):
 
     except Appointment.DoesNotExist:
         return Response({'error': 'Appointment not found'}, status=status.HTTP_404_NOT_FOUND)
-
 
 
 @api_view(['POST'])
@@ -167,13 +181,6 @@ def mark_to_completion(request, pk):
     except Appointment.DoesNotExist:
         return Response({'error': 'Appointment not found'}, status=status.HTTP_404_NOT_FOUND)
 
-class AvailableDayListCreate(generics.ListCreateAPIView):
-    queryset = AvailableDay.objects.all()
-    serializer_class = AvailableDaySerializer
-    permission_classes = [IsAdminOrReadOnly]  # Apply the custom permission class
-
-    def perform_create(self, serializer):
-        serializer.save()
 
 @api_view(['POST'])
 @permission_classes([permissions.IsAdminUser])
@@ -205,8 +212,8 @@ def set_availability(request):
 
         return Response({'message': f'Availability set for range {start_date_str} - {end_date_str}'}, status=status.HTTP_200_OK)
     except Exception as e:
-        print(f"Error in set_availability: {e}")
         return Response({'error': f'Internal Server Error: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 @api_view(['DELETE'])
 @permission_classes([permissions.IsAdminUser])
@@ -231,8 +238,8 @@ def remove_available_days(request):
 
         return Response({'message': f'Available days removed for range {start_date_str} - {end_date_str}'}, status=status.HTTP_200_OK)
     except Exception as e:
-        print(f"Error in remove_available_days: {e}")
         return Response({'error': f'Internal Server Error: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])

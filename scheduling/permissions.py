@@ -2,10 +2,12 @@ from rest_framework.permissions import BasePermission, SAFE_METHODS
 
 class IsAdminOrReadOnly(BasePermission):
     """
-    Custom permission to only allow admin users to create or update, but allow
-    read-only access for authenticated users.
+    Custom permission to allow read-only access for unauthenticated users,
+    and restrict write access to admin users.
     """
     def has_permission(self, request, view):
+        # Allow read-only (GET, HEAD, OPTIONS) access to anyone, including unauthenticated users
         if request.method in SAFE_METHODS:
-            return request.user and request.user.is_authenticated
+            return True
+        # Restrict write operations (POST, PUT, DELETE) to staff (admin) users
         return request.user and request.user.is_staff
