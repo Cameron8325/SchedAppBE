@@ -1,11 +1,13 @@
 from rest_framework import generics, status, permissions
 from rest_framework.response import Response
-from django.core.mail import send_mail
-from .models import Appointment, AvailableDay
-from .serializers import AppointmentSerializer, AvailableDaySerializer
 from rest_framework.decorators import api_view, permission_classes
 from datetime import datetime, timedelta
+from django.core.mail import send_mail
+from django.contrib.auth.models import User
+from .models import Appointment, AvailableDay
+from .serializers import AppointmentSerializer, AvailableDaySerializer
 from .permissions import IsAdminOrReadOnly
+
 
 
 class AppointmentListCreate(generics.ListCreateAPIView):

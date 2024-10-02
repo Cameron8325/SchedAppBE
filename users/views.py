@@ -10,21 +10,17 @@ from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django.utils.encoding import force_bytes
 from django.contrib.auth.tokens import default_token_generator
 from django.conf import settings
-from django.views.decorators.csrf import csrf_exempt
 from django.http import JsonResponse
-
-from django.views.decorators.csrf import csrf_exempt
-from django.http import JsonResponse
-from django.shortcuts import get_object_or_404  # Add this import
-import json  # And this one
+from django.shortcuts import get_object_or_404
+import json
 from django.contrib.sessions.models import Session
 from django.utils import timezone
-
 
 from .serializers import UserSerializer, RegisterSerializer
 from scheduling.serializers import AppointmentSerializer
 from scheduling.models import Appointment
 from scheduling.permissions import IsAdminOrReadOnly
+
 
 class RegisterView(generics.CreateAPIView):
     queryset = User.objects.all()
@@ -84,7 +80,6 @@ def password_reset_request(request):
     return Response({'error': 'Email is required'}, status=status.HTTP_400_BAD_REQUEST)
 
 
-@csrf_exempt
 def custom_password_reset_confirm(request, uidb64, token):
     if request.method == 'POST':
         try:

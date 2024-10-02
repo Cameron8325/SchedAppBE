@@ -1,9 +1,17 @@
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework import status
 from rest_framework.response import Response
-from django.contrib.auth.models import User
-from users.models import Profile 
 from rest_framework.permissions import IsAdminUser
+from django.contrib.auth.models import User
+from django.db.models import Q
+from django.core.mail import send_mail
+from datetime import datetime, timedelta
+
+from users.models import Profile
+from users.serializers import UserSerializer
+from scheduling.models import Appointment, AvailableDay
+from scheduling.serializers import AppointmentSerializer
+
 
 @api_view(['POST'])
 @permission_classes([IsAdminUser])
