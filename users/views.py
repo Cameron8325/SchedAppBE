@@ -48,27 +48,6 @@ class LoginView(generics.GenericAPIView):
             })
         return Response({'error': 'Invalid credentials'}, status=400)
 
-@api_view(['POST'])
-@permission_classes([permissions.IsAdminUser])
-def update_tokens(request, user_id):
-    try:
-        user = User.objects.get(pk=user_id)
-        tokens = request.data.get('tokens')
-
-        if tokens is not None:
-            try:
-                tokens = int(tokens)
-                if tokens >= 0:
-                    user.profile.tokens = tokens
-                    user.profile.save()
-                    return Response({'message': 'Tokens updated successfully'}, status=status.HTTP_200_OK)
-                else:
-                    return Response({'error': 'Tokens value must be a non-negative integer'}, status=status.HTTP_400_BAD_REQUEST)
-            except ValueError:
-                return Response({'error': 'Valid tokens value is required'}, status=status.HTTP_400_BAD_REQUEST)
-        return Response({'error': 'Tokens value is required'}, status=status.HTTP_400_BAD_REQUEST)
-    except User.DoesNotExist:
-        return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
 
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
@@ -78,36 +57,7 @@ def user_appointments(request):
     serializer = AppointmentSerializer(appointments, many=True)
     return Response(serializer.data, status=status.HTTP_200_OK)
 
-@api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
-def search_users(request):
-    username = request.query_params.get('username', None)
-    first_name = request.query_params.get('first_name', None)
-    last_name = request.query_params.get('last_name', None)
 
-    try:
-        filters = Q()
-
-        if username:
-            filters &= Q(username__icontains=username)
-        if first_name:
-            filters &= Q(first_name__icontains=first_name)
-        if last_name:
-            filters &= Q(last_name__icontains=last_name)
-
-        if filters:
-            users = User.objects.filter(filters)
-        else:
-            return Response({"error": "Please provide a search term."}, status=400)
-
-        if users.exists():
-            serializer = UserSerializer(users, many=True)
-            return Response(serializer.data)
-        else:
-            return Response({"error": "No users found."}, status=404)
-
-    except Exception as e:
-        return Response({"error": "Internal Server Error"}, status=500)
 
 @api_view(['POST'])
 def password_reset_request(request):

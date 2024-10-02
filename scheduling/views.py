@@ -76,184 +76,53 @@ class AvailableDayListCreate(generics.ListCreateAPIView):
     def perform_create(self, serializer):
         serializer.save()
 
-
 @api_view(['POST'])
-@permission_classes([permissions.IsAdminUser])
-def approve_appointment(request, pk):
-    try:
-        appointment = Appointment.objects.get(pk=pk)
-        appointment.status = 'confirmed'
-        appointment.reason = ''  # Clear the reason field
-        appointment.save()
-
-        send_mail(
-            'Appointment Confirmed',
-            f'Your appointment on {appointment.date} has been confirmed.',
-            'your-email@gmail.com',
-            [appointment.user.email],
-            fail_silently=False,
-        )
-        serializer = AppointmentSerializer(appointment)
-        return Response(serializer.data, status=status.HTTP_200_OK)
-    except Appointment.DoesNotExist:
-        return Response({'error': 'Appointment not found'}, status=status.HTTP_404_NOT_FOUND)
-
-
-@api_view(['POST'])
-@permission_classes([permissions.IsAdminUser])
-def deny_appointment(request, pk):
-    try:
-        appointment = Appointment.objects.get(pk=pk)
-        date = appointment.date
-        appointment.delete()
-
-        # Update the spots left
-        existing_appointments_count = Appointment.objects.filter(date=date).count()
-        spots_left = 4 - existing_appointments_count
-
-        # Update remaining appointments' spots_left
-        Appointment.objects.filter(date=date).update(spots_left=spots_left)
-
-        send_mail(
-            'Appointment Denied',
-            f'Your appointment on {date} has been denied.',
-            'your-email@gmail.com',
-            [appointment.user.email],
-            fail_silently=False,
-        )
-
-        return Response({'message': 'Appointment denied'}, status=status.HTTP_200_OK)
-    except Appointment.DoesNotExist:
-        return Response({'error': 'Appointment not found'}, status=status.HTTP_404_NOT_FOUND)
-
-
-@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
 def flag_appointment(request, pk):
     try:
-        appointment = Appointment.objects.get(pk=pk)
-        reason = request.data.get('reason', '')  # Get the reason from the request
+        user = request.user
+        reason = request.data.get('reason', '').strip()
 
-        if reason:
-            appointment.reason = reason  # Store the reason in the appointment model
-            appointment.status = 'flagged'
-            appointment.save()
+        if user.is_staff or user.is_superuser:
+            # Admin can flag any appointment
+            appointment = Appointment.objects.get(pk=pk)
+            if not reason:
+                return Response({'error': 'Reason for flagging is required'}, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            # Regular user can only flag their own appointment
+            appointment = Appointment.objects.get(pk=pk, user=user)
+            if not reason:
+                return Response({'error': 'Reason for flagging is required'}, status=status.HTTP_400_BAD_REQUEST)
 
-            # Send notification email to the user
+        # Update appointment status and reason
+        appointment.status = 'flagged'
+        appointment.reason = reason
+        appointment.save()
+
+        # Send notification emails
+        if user.is_staff or user.is_superuser:
+            # Notify the appointment's user
             send_mail(
-                'Appointment Flagged',
-                f'Your appointment on {appointment.date} has been flagged for review with the reason: {reason}.',
-                'your-email@gmail.com',
+                'Appointment Flagged by Admin',
+                f'Your appointment on {appointment.date} has been flagged by an administrator for the following reason:\n\n{reason}',
+                'admin@example.com',
                 [appointment.user.email],
                 fail_silently=False,
             )
-
-            serializer = AppointmentSerializer(appointment)
-            return Response(serializer.data, status=status.HTTP_200_OK)
         else:
-            return Response({'error': 'Reason for flagging is required'}, status=status.HTTP_400_BAD_REQUEST)
+            # Notify the admins
+            admin_emails = [admin.email for admin in User.objects.filter(is_staff=True)]
+            send_mail(
+                f'Appointment Flagged by User {user.username}',
+                f'User {user.username} has flagged their appointment on {appointment.date}.\n\nReason:\n{reason}',
+                'no-reply@example.com',
+                admin_emails,
+                fail_silently=False,
+            )
 
-    except Appointment.DoesNotExist:
-        return Response({'error': 'Appointment not found'}, status=status.HTTP_404_NOT_FOUND)
-
-
-@api_view(['POST'])
-@permission_classes([permissions.IsAdminUser])
-def mark_to_completion(request, pk):
-    try:
-        appointment = Appointment.objects.get(pk=pk)
-        if appointment.status != 'to_completion':
-            appointment.status = 'to_completion'
-            appointment.save()
-
-        profile = appointment.user.profile
-        profile.tokens += 1
-        profile.save()
-
-        send_mail(
-            'Appointment Completed',
-            f'Your appointment on {appointment.date} has been marked as completed.',
-            'your-email@gmail.com',
-            [appointment.user.email],
-            fail_silently=False,
-        )
         serializer = AppointmentSerializer(appointment)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
     except Appointment.DoesNotExist:
         return Response({'error': 'Appointment not found'}, status=status.HTTP_404_NOT_FOUND)
 
-
-@api_view(['POST'])
-@permission_classes([permissions.IsAdminUser])
-def set_availability(request):
-    try:
-        start_date_str = request.data.get('start_date')
-        end_date_str = request.data.get('end_date')
-        day_type = request.data.get('type')
-
-        if not start_date_str or not day_type:
-            return Response({'error': 'Start date and type are required'}, status=status.HTTP_400_BAD_REQUEST)
-
-        try:
-            start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
-            end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date() if end_date_str else start_date
-        except ValueError:
-            return Response({'error': 'Invalid date format. Use YYYY-MM-DD.'}, status=status.HTTP_400_BAD_REQUEST)
-
-        if start_date > end_date:
-            return Response({'error': 'Start date must be before end date'}, status=status.HTTP_400_BAD_REQUEST)
-
-        current_date = start_date
-        while current_date <= end_date:
-            AvailableDay.objects.update_or_create(
-                date=current_date,
-                defaults={'type': day_type}
-            )
-            current_date += timedelta(days=1)
-
-        return Response({'message': f'Availability set for range {start_date_str} - {end_date_str}'}, status=status.HTTP_200_OK)
-    except Exception as e:
-        return Response({'error': f'Internal Server Error: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-@api_view(['DELETE'])
-@permission_classes([permissions.IsAdminUser])
-def remove_available_days(request):
-    try:
-        start_date_str = request.query_params.get('start_date')
-        end_date_str = request.query_params.get('end_date')
-
-        if not start_date_str or not end_date_str:
-            return Response({'error': 'Start date and end date are required'}, status=status.HTTP_400_BAD_REQUEST)
-
-        try:
-            start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
-            end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
-        except ValueError:
-            return Response({'error': 'Invalid date format. Use YYYY-MM-DD.'}, status=status.HTTP_400_BAD_REQUEST)
-
-        if start_date > end_date:
-            return Response({'error': 'Start date must be before end date'}, status=status.HTTP_400_BAD_REQUEST)
-
-        AvailableDay.objects.filter(date__gte=start_date, date__lte=end_date).delete()
-
-        return Response({'message': f'Available days removed for range {start_date_str} - {end_date_str}'}, status=status.HTTP_200_OK)
-    except Exception as e:
-        return Response({'error': f'Internal Server Error: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-@api_view(['POST'])
-@permission_classes([permissions.IsAuthenticated])
-def user_flag_appointment(request, pk):
-    try:
-        appointment = Appointment.objects.get(pk=pk, user=request.user)
-        appointment.status = 'flagged'
-        appointment.save()
-        return Response({'message': 'Appointment flagged'}, status=status.HTTP_200_OK)
-    except Appointment.DoesNotExist:
-        return Response({'error': 'Appointment not found'}, status=status.HTTP_404_NOT_FOUND)
-
-
-@api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
-def check_superuser(request):
-    return Response({'is_superuser': request.user.is_superuser})
