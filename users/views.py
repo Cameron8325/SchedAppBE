@@ -50,7 +50,7 @@ class LoginView(generics.GenericAPIView):
 def user_appointments(request):
     user = request.user
     appointments = Appointment.objects.filter(user=user).order_by('-date')
-    serializer = AppointmentSerializer(appointments, many=True)
+    serializer = AppointmentSerializer(appointments, many=True, context={'request': request})
     return Response(serializer.data, status=status.HTTP_200_OK)
 
 

@@ -9,14 +9,13 @@ from .serializers import AppointmentSerializer, AvailableDaySerializer
 from .permissions import IsAdminOrReadOnly
 
 
-
 class AppointmentListCreate(generics.ListCreateAPIView):
     queryset = Appointment.objects.all()
     serializer_class = AppointmentSerializer
 
     def get_permissions(self):
         if self.request.method == 'GET':
-            # Allow anyone to view appointments
+            # Allow anyone to view available appointments
             return [permissions.AllowAny()]
         # Only authenticated users can create appointments (POST)
         return [permissions.IsAuthenticated()]
@@ -24,10 +23,10 @@ class AppointmentListCreate(generics.ListCreateAPIView):
     def create(self, request, *args, **kwargs):
         try:
             date = request.data.get('date')
-            user_id = request.data.get('user')
+            user = request.user  # Automatically assign the authenticated user
 
-            if not date or not user_id:
-                return Response({'error': 'Date and user are required'}, status=status.HTTP_400_BAD_REQUEST)
+            if not date:
+                return Response({'error': 'Date is required'}, status=status.HTTP_400_BAD_REQUEST)
 
             parsed_date = datetime.strptime(date, '%Y-%m-%d').date()
             existing_appointments_count = Appointment.objects.filter(date=parsed_date).count()
@@ -45,7 +44,7 @@ class AppointmentListCreate(generics.ListCreateAPIView):
             spots_left = 4 - existing_appointments_count
 
             appointment = Appointment.objects.create(
-                user_id=user_id,
+                user=user,
                 date=parsed_date,
                 day_type=day_type,
                 status='pending',
@@ -61,13 +60,11 @@ class AppointmentListCreate(generics.ListCreateAPIView):
             )
 
             serializer = self.get_serializer(appointment)
-            response_data = serializer.data
-            response_data['spots_left'] = spots_left
-
-            return Response(response_data, status=status.HTTP_201_CREATED)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
         except Exception as e:
             print("Error in create appointment:", str(e))
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 
 class AvailableDayListCreate(generics.ListCreateAPIView):
