@@ -75,53 +75,5 @@ class AvailableDayListCreate(generics.ListCreateAPIView):
     def perform_create(self, serializer):
         serializer.save()
 
-@api_view(['POST'])
-@permission_classes([permissions.IsAuthenticated])
-def flag_appointment(request, pk):
-    try:
-        user = request.user
-        reason = request.data.get('reason', '').strip()
 
-        if user.is_staff or user.is_superuser:
-            # Admin can flag any appointment
-            appointment = Appointment.objects.get(pk=pk)
-            if not reason:
-                return Response({'error': 'Reason for flagging is required'}, status=status.HTTP_400_BAD_REQUEST)
-        else:
-            # Regular user can only flag their own appointment
-            appointment = Appointment.objects.get(pk=pk, user=user)
-            if not reason:
-                return Response({'error': 'Reason for flagging is required'}, status=status.HTTP_400_BAD_REQUEST)
-
-        # Update appointment status and reason
-        appointment.status = 'flagged'
-        appointment.reason = reason
-        appointment.save()
-
-        # Send notification emails
-        if user.is_staff or user.is_superuser:
-            # Notify the appointment's user
-            send_mail(
-                'Appointment Flagged by Admin',
-                f'Your appointment on {appointment.date} has been flagged by an administrator for the following reason:\n\n{reason}',
-                'admin@example.com',
-                [appointment.user.email],
-                fail_silently=False,
-            )
-        else:
-            # Notify the admins
-            admin_emails = [admin.email for admin in User.objects.filter(is_staff=True)]
-            send_mail(
-                f'Appointment Flagged by User {user.username}',
-                f'User {user.username} has flagged their appointment on {appointment.date}.\n\nReason:\n{reason}',
-                'no-reply@example.com',
-                admin_emails,
-                fail_silently=False,
-            )
-
-        serializer = AppointmentSerializer(appointment)
-        return Response(serializer.data, status=status.HTTP_200_OK)
-
-    except Appointment.DoesNotExist:
-        return Response({'error': 'Appointment not found'}, status=status.HTTP_404_NOT_FOUND)
 
