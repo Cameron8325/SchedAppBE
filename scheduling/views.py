@@ -20,29 +20,52 @@ class AppointmentListCreate(generics.ListCreateAPIView):
         # Only authenticated users can create appointments (POST)
         return [permissions.IsAuthenticated()]
 
-    def create(self, request, *args, **kwargs):
+def create(self, request, *args, **kwargs):
+    try:
+        date = request.data.get('date')
+        user = request.user
+
+        if not date:
+            return Response({'error': 'Date is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        parsed_date = datetime.strptime(date, '%Y-%m-%d').date()
+        existing_appointments_count = Appointment.objects.filter(date=parsed_date).count()
+
+        if existing_appointments_count >= 4:
+            return Response({'error': 'No slots left for this day'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Get the day type from AvailableDay
         try:
-            date = request.data.get('date')
-            user = request.user  # Automatically assign the authenticated user
+            available_day = AvailableDay.objects.get(date=parsed_date)
+            day_type = available_day.type
+        except AvailableDay.DoesNotExist:
+            return Response({'error': 'This day is not available for appointments'}, status=status.HTTP_400_BAD_REQUEST)
 
-            if not date:
-                return Response({'error': 'Date is required'}, status=status.HTTP_400_BAD_REQUEST)
+        spots_left = 4 - existing_appointments_count
 
-            parsed_date = datetime.strptime(date, '%Y-%m-%d').date()
-            existing_appointments_count = Appointment.objects.filter(date=parsed_date).count()
+        walk_in_first_name = request.data.get('walk_in_first_name')
+        walk_in_last_name = request.data.get('walk_in_last_name')
+        walk_in_email = request.data.get('walk_in_email')
+        walk_in_phone = request.data.get('walk_in_phone')
 
-            if existing_appointments_count >= 4:
-                return Response({'error': 'No slots left for this day'}, status=status.HTTP_400_BAD_REQUEST)
+        if walk_in_first_name and walk_in_last_name and walk_in_email and walk_in_phone:
+            # Only admins or superusers can create walk-in appointments
+            if not user.is_superuser:
+                return Response({'error': 'Unauthorized to create walk-in appointments'}, status=status.HTTP_403_FORBIDDEN)
 
-            # Get the day type from the AvailableDay model
-            try:
-                available_day = AvailableDay.objects.get(date=parsed_date)
-                day_type = available_day.type
-            except AvailableDay.DoesNotExist:
-                return Response({'error': 'This day is not available for appointments'}, status=status.HTTP_400_BAD_REQUEST)
-
-            spots_left = 4 - existing_appointments_count
-
+            # Create appointment for walk-in
+            appointment = Appointment.objects.create(
+                walk_in_first_name=walk_in_first_name,
+                walk_in_last_name=walk_in_last_name,
+                walk_in_email=walk_in_email,
+                walk_in_phone=walk_in_phone,
+                date=parsed_date,
+                day_type=day_type,
+                status='pending',
+                spots_left=spots_left
+            )
+        else:
+            # Normal flow for registered users
             appointment = Appointment.objects.create(
                 user=user,
                 date=parsed_date,
@@ -51,20 +74,19 @@ class AppointmentListCreate(generics.ListCreateAPIView):
                 spots_left=spots_left
             )
 
-            send_mail(
-                'Appointment Request',
-                f'Your appointment on {appointment.date} ({appointment.get_day_type_display()}) is pending approval.',
-                'your-email@gmail.com',
-                [appointment.user.email],
-                fail_silently=False,
-            )
+        send_mail(
+            'Appointment Request',
+            f'Your appointment on {appointment.date} ({appointment.get_day_type_display()}) is pending approval.',
+            'your-email@gmail.com',
+            [appointment.walk_in_email] if appointment.walk_in_email else [appointment.user.email],
+            fail_silently=False,
+        )
 
-            serializer = self.get_serializer(appointment)
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        except Exception as e:
-            print("Error in create appointment:", str(e))
-            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
+        serializer = self.get_serializer(appointment)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    except Exception as e:
+        print("Error in create appointment:", str(e))
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class AvailableDayListCreate(generics.ListCreateAPIView):

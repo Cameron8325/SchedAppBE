@@ -15,13 +15,14 @@ from django.shortcuts import get_object_or_404
 import json
 from django.contrib.sessions.models import Session
 from django.utils import timezone
-from django.views.decorators.csrf import csrf_exempt
 from rest_framework.permissions import AllowAny
 
 from .serializers import UserSerializer, RegisterSerializer
 from scheduling.serializers import AppointmentSerializer
 from scheduling.models import Appointment
 from scheduling.permissions import IsAdminOrReadOnly
+from rest_framework_simplejwt.views import TokenRefreshView
+
 
 
 class RegisterView(generics.CreateAPIView):
@@ -32,8 +33,16 @@ class RegisterView(generics.CreateAPIView):
     serializer_class = RegisterSerializer
     permission_classes = [AllowAny]
 
+class CookieTokenRefreshView(TokenRefreshView):
+    def post(self, request, *args, **kwargs):
+        # Get the refresh token from the cookie if it's not in the request data
+        if 'refresh' not in request.data:
+            refresh_token = request.COOKIES.get('refresh_token')
+            if refresh_token:
+                request.data['refresh'] = refresh_token
+        return super().post(request, *args, **kwargs)
 
-@csrf_exempt  # Disable CSRF protection for login for now
+
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def login_view(request):
@@ -43,28 +52,69 @@ def login_view(request):
 
     if user and user.check_password(password):
         refresh = RefreshToken.for_user(user)
+        access_token = str(refresh.access_token)  # Get the access token
+        refresh_token = str(refresh)  # Get the refresh token
         user_data = UserSerializer(user).data  # Serialize user data
 
-        # Add access and refresh token directly to the response body
         response = Response({
             'user': user_data,
-            'access': str(refresh.access_token),  # Add access token to the response body
-            'refresh': str(refresh)  # Optionally add the refresh token as well
+            'message': 'Login successful'
         }, status=status.HTTP_200_OK)
+
+        # Set the access and refresh tokens in HttpOnly cookies
+        response.set_cookie(
+            key='access_token',
+            value=access_token,
+            httponly=True,
+            secure=not settings.DEBUG,  # Secure in production (HTTPS only)
+            samesite='Lax'
+        )
+
+        response.set_cookie(
+            key='refresh_token',
+            value=refresh_token,
+            httponly=True,
+            secure=not settings.DEBUG,  # Secure in production (HTTPS only)
+            samesite='Lax'
+        )
 
         return response
 
     return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
 
 
-@csrf_exempt
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def logout_view(request):
     response = Response({'message': 'Logged out successfully'}, status=status.HTTP_200_OK)
-    response.delete_cookie('access_token')
-    response.delete_cookie('refresh_token')
+    
+    # Delete the access and refresh token cookies
+    response.delete_cookie('access_token', path='/')
+    response.delete_cookie('refresh_token', path='/')
+    
+    print("Logout: access_token and refresh_token cookies deleted")  # Debugging log
+    
     return response
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def set_csrf(request):
+    """
+    Simple view to set the CSRF token cookie.
+    """
+    return Response({'message': 'CSRF cookie set'})
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def check_user(request):
+    """
+    API view to get the authenticated user's profile.
+    """
+    user = request.user
+    user_data = UserSerializer(user).data
+    return Response(user_data, status=status.HTTP_200_OK)
+
 
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
@@ -112,7 +162,6 @@ def password_reset_request(request):
     return Response({'error': 'Email is required'}, status=status.HTTP_400_BAD_REQUEST)
 
 
-@csrf_exempt  # Disable CSRF for custom password reset
 def custom_password_reset_confirm(request, uidb64, token):
     """
     Custom view to confirm password reset from the link in the email.

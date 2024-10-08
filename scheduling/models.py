@@ -28,5 +28,10 @@ class Appointment(models.Model):
     spots_left = models.IntegerField(default=4)
     reason = models.CharField(max_length=255, blank=True, null=True)
 
+    walk_in_first_name = models.CharField(max_length=255, blank=True, null=True)  # Walk-in first name
+    walk_in_last_name = models.CharField(max_length=255, blank=True, null=True)   # Walk-in last name
+    walk_in_email = models.EmailField(max_length=255, blank=True, null=True)      # Walk-in email
+    walk_in_phone = models.CharField(max_length=15, blank=True, null=True)        # Walk-in phone number
+
     def __str__(self):
         return f"{self.user.username} - {self.date} - {self.status}"
