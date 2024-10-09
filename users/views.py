@@ -22,6 +22,10 @@ from scheduling.serializers import AppointmentSerializer
 from scheduling.models import Appointment
 from scheduling.permissions import IsAdminOrReadOnly
 from rest_framework_simplejwt.views import TokenRefreshView
+from django.views.decorators.csrf import csrf_exempt
+from django.utils.decorators import method_decorator
+
+
 
 
 
@@ -33,6 +37,7 @@ class RegisterView(generics.CreateAPIView):
     serializer_class = RegisterSerializer
     permission_classes = [AllowAny]
 
+@method_decorator(csrf_exempt, name='dispatch')  # Apply csrf_exempt to the dispatch method
 class CookieTokenRefreshView(TokenRefreshView):
     def post(self, request, *args, **kwargs):
         # Get the refresh token from the cookie if it's not in the request data
@@ -40,8 +45,9 @@ class CookieTokenRefreshView(TokenRefreshView):
             refresh_token = request.COOKIES.get('refresh_token')
             if refresh_token:
                 request.data['refresh'] = refresh_token
+            else:
+                return Response({'error': 'No refresh token found'}, status=status.HTTP_400_BAD_REQUEST)
         return super().post(request, *args, **kwargs)
-
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
