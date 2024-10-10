@@ -204,3 +204,60 @@ def custom_password_reset_confirm(request, uidb64, token):
         else:
             return JsonResponse({'error': 'Invalid token or user'}, status=400)
     return JsonResponse({'error': 'POST request required'}, status=400)
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def account_deletion_request(request):
+    """
+    API view to handle account deletion request. Sends a confirmation email.
+    """
+    password = request.data.get('password')
+    user = request.user
+
+    # Verify password
+    if not user.check_password(password):
+        return Response({'error': 'Incorrect password'}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Generate deletion token
+    uidb64 = urlsafe_base64_encode(force_bytes(user.pk))
+    token = default_token_generator.make_token(user)
+
+    # Build deletion link
+    deletion_link = f"http://localhost:3000/users/delete-account-confirm/{uidb64}/{token}"
+
+    # Send email
+    subject = "Account Deletion Requested"
+    email_content = f"Hi {user.username},\n\nClick the link below to permanently delete your account:\n{deletion_link}\n\nIf you did not request this, please ignore this email."
+
+    send_mail(
+        subject,
+        email_content,
+        settings.EMAIL_HOST_USER,
+        [user.email],
+        fail_silently=False,
+    )
+
+    # Add this return statement
+    return Response({'message': 'Account deletion email sent'}, status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])  # No authentication required since we're using tokens
+def account_deletion_confirm(request, uidb64, token):
+    """
+    API view to confirm account deletion from the link in the email.
+    """
+    try:
+        uid = urlsafe_base64_decode(uidb64).decode()
+        user = User.objects.get(pk=uid)
+    except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+        return Response({'error': 'Invalid link'}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Verify token
+    if not default_token_generator.check_token(user, token):
+        return Response({'error': 'Invalid or expired token'}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Delete user account
+    user.delete()
+
+    return Response({'message': 'Account deleted successfully'}, status=status.HTTP_200_OK)
