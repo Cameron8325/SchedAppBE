@@ -2,7 +2,6 @@ from rest_framework import serializers
 from .models import Appointment, AvailableDay
 from users.serializers import UserSerializer  # Import the UserSerializer
 
-
 class AppointmentSerializer(serializers.ModelSerializer):
     status_display = serializers.SerializerMethodField()
     day_type_display = serializers.SerializerMethodField()
@@ -12,11 +11,14 @@ class AppointmentSerializer(serializers.ModelSerializer):
     walk_in_email = serializers.EmailField(allow_null=True, required=False)
     walk_in_phone = serializers.CharField(allow_null=True, required=False)
 
+    user = UserSerializer(allow_null=True, required=False)  # Ensure the user field is handled correctly
+
     class Meta:
         model = Appointment
         fields = [
             'id', 'date', 'day_type_display', 'status', 'status_display', 'spots_left',
-            'walk_in_first_name', 'walk_in_last_name', 'walk_in_email', 'walk_in_phone'
+            'walk_in_first_name', 'walk_in_last_name', 'walk_in_email', 'walk_in_phone',
+            'user'  # Make sure the user field is included in the serializer
         ]
 
     def get_status_display(self, obj):
@@ -32,7 +34,7 @@ class AppointmentSerializer(serializers.ModelSerializer):
         if request and request.user.is_authenticated and (request.user.is_staff or 'admin' in request.path):
             # Send all fields for admin or when accessing the admin dashboard
             extra_fields = {
-                'user': UserSerializer(instance.user).data if instance.user else None,
+                'user': UserSerializer(instance.user).data if instance.user else None,  # Include user details if available
                 'day_type': instance.day_type,
                 'status': instance.status,
                 'reason': instance.reason,

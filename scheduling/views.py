@@ -15,26 +15,24 @@ class AppointmentListCreate(generics.ListCreateAPIView):
 
     def get_permissions(self):
         if self.request.method == 'GET':
-            # Allow anyone to view available appointments
-            return [permissions.AllowAny()]
-        # Only authenticated users can create appointments (POST)
-        return [permissions.IsAuthenticated()]
+            return [permissions.AllowAny()]  # Allow anyone to view appointments
+        return [permissions.IsAuthenticated()]  # Only authenticated users can create appointments
 
     def create(self, request, *args, **kwargs):
         try:
+            # Parse date and user information
             date = request.data.get('date')
-            user = request.user
-
             if not date:
                 return Response({'error': 'Date is required'}, status=status.HTTP_400_BAD_REQUEST)
 
             parsed_date = datetime.strptime(date, '%Y-%m-%d').date()
             existing_appointments_count = Appointment.objects.filter(date=parsed_date).count()
 
+            # Check if there are available slots
             if existing_appointments_count >= 4:
                 return Response({'error': 'No slots left for this day'}, status=status.HTTP_400_BAD_REQUEST)
 
-            # Get the day type from AvailableDay
+            # Get the available day type
             try:
                 available_day = AvailableDay.objects.get(date=parsed_date)
                 day_type = available_day.type
@@ -42,18 +40,17 @@ class AppointmentListCreate(generics.ListCreateAPIView):
                 return Response({'error': 'This day is not available for appointments'}, status=status.HTTP_400_BAD_REQUEST)
 
             spots_left = 4 - existing_appointments_count
-
             walk_in_first_name = request.data.get('walk_in_first_name')
             walk_in_last_name = request.data.get('walk_in_last_name')
             walk_in_email = request.data.get('walk_in_email')
             walk_in_phone = request.data.get('walk_in_phone')
 
+            # Walk-in appointment logic
             if walk_in_first_name and walk_in_last_name and walk_in_email and walk_in_phone:
-                # Only admins or superusers can create walk-in appointments
-                if not user.is_superuser:
+                if not request.user.is_superuser:
                     return Response({'error': 'Unauthorized to create walk-in appointments'}, status=status.HTTP_403_FORBIDDEN)
 
-                # Create appointment for walk-in
+                # Create a walk-in appointment with null user
                 appointment = Appointment.objects.create(
                     walk_in_first_name=walk_in_first_name,
                     walk_in_last_name=walk_in_last_name,
@@ -62,10 +59,12 @@ class AppointmentListCreate(generics.ListCreateAPIView):
                     date=parsed_date,
                     day_type=day_type,
                     status='pending',
-                    spots_left=spots_left
+                    spots_left=spots_left,
+                    user=None  # Explicitly set user to None for walk-ins
                 )
             else:
-                # Normal flow for registered users
+                # Regular appointment creation for logged-in users
+                user = request.user
                 appointment = Appointment.objects.create(
                     user=user,
                     date=parsed_date,
@@ -74,6 +73,7 @@ class AppointmentListCreate(generics.ListCreateAPIView):
                     spots_left=spots_left
                 )
 
+            # Send confirmation email
             send_mail(
                 'Appointment Request',
                 f'Your appointment on {appointment.date} ({appointment.get_day_type_display()}) is pending approval.',
@@ -84,8 +84,8 @@ class AppointmentListCreate(generics.ListCreateAPIView):
 
             serializer = self.get_serializer(appointment)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
+
         except Exception as e:
-            print("Error in create appointment:", str(e))
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
