@@ -40,6 +40,12 @@ def approve_appointment(request, pk):
         appointment.reason = ''  # Clear the reason field
         appointment.save()
 
+        # Update the spots left for the day
+        date = appointment.date
+        existing_appointments_count = Appointment.objects.filter(date=date).count()
+        spots_left = 4 - existing_appointments_count
+        Appointment.objects.filter(date=date).update(spots_left=spots_left)
+
         send_mail(
             'Appointment Confirmed',
             f'Your appointment on {appointment.date} has been confirmed.',
@@ -53,6 +59,7 @@ def approve_appointment(request, pk):
         return Response({'error': 'Appointment not found'}, status=status.HTTP_404_NOT_FOUND)
 
 
+
 @api_view(['POST'])
 @permission_classes([IsAdminUser])
 def deny_appointment(request, pk):
@@ -61,11 +68,9 @@ def deny_appointment(request, pk):
         date = appointment.date
         appointment.delete()
 
-        # Update the spots left
+        # Update the spots left after deletion
         existing_appointments_count = Appointment.objects.filter(date=date).count()
         spots_left = 4 - existing_appointments_count
-
-        # Update remaining appointments' spots_left
         Appointment.objects.filter(date=date).update(spots_left=spots_left)
 
         send_mail(
@@ -80,55 +85,47 @@ def deny_appointment(request, pk):
     except Appointment.DoesNotExist:
         return Response({'error': 'Appointment not found'}, status=status.HTTP_404_NOT_FOUND)
 
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def flag_appointment(request, pk):
     try:
         user = request.user
-        reason = request.data.get('reason', '').strip()
+        reason = request.data.get('reason', '').trim()
 
         if user.is_staff or user.is_superuser:
-            # Admin can flag any appointment
             appointment = Appointment.objects.get(pk=pk)
-            if not reason:
-                return Response({'error': 'Reason for flagging is required'}, status=status.HTTP_400_BAD_REQUEST)
         else:
-            # Regular user can only flag their own appointment
             appointment = Appointment.objects.get(pk=pk, user=user)
-            if not reason:
-                return Response({'error': 'Reason for flagging is required'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Update appointment status and reason
+        if not reason:
+            return Response({'error': 'Reason for flagging is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Flag the appointment and update the reason
         appointment.status = 'flagged'
         appointment.reason = reason
         appointment.save()
 
-        # Send notification emails
-        if user.is_staff or user.is_superuser:
-            # Notify the appointment's user
-            send_mail(
-                'Appointment Flagged by Admin',
-                f'Your appointment on {appointment.date} has been flagged by an administrator for the following reason:\n\n{reason}',
-                'admin@example.com',
-                [appointment.user.email],
-                fail_silently=False,
-            )
-        else:
-            # Notify the admins
-            admin_emails = [admin.email for admin in User.objects.filter(is_staff=True)]
-            send_mail(
-                f'Appointment Flagged by User {user.username}',
-                f'User {user.username} has flagged their appointment on {appointment.date}.\n\nReason:\n{reason}',
-                'no-reply@example.com',
-                admin_emails,
-                fail_silently=False,
-            )
+        # Notify the appointment's user or admin
+        send_mail(
+            'Appointment Flagged',
+            f'Your appointment on {appointment.date} has been flagged. Reason: {reason}',
+            'admin@example.com',
+            [appointment.user.email] if not user.is_staff else [user.email],
+            fail_silently=False,
+        )
+
+        # Optionally update the spots left after flagging (if you want to recalculate based on total appointments)
+        date = appointment.date
+        existing_appointments_count = Appointment.objects.filter(date=date).count()
+        spots_left = 4 - existing_appointments_count
+        Appointment.objects.filter(date=date).update(spots_left=spots_left)
 
         serializer = AppointmentSerializer(appointment)
         return Response(serializer.data, status=status.HTTP_200_OK)
-
     except Appointment.DoesNotExist:
         return Response({'error': 'Appointment not found'}, status=status.HTTP_404_NOT_FOUND)
+
 
 @api_view(['POST'])
 @permission_classes([IsAdminUser])

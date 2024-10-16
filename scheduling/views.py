@@ -89,13 +89,33 @@ class AppointmentListCreate(generics.ListCreateAPIView):
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+
 class AvailableDayListCreate(generics.ListCreateAPIView):
     queryset = AvailableDay.objects.all()
     serializer_class = AvailableDaySerializer
-    permission_classes = [IsAdminOrReadOnly]  # Apply the custom permission class
 
-    def perform_create(self, serializer):
-        serializer.save()
+    def get(self, request, *args, **kwargs):
+        available_days = AvailableDay.objects.all()
+        updated_days = []
 
+        for available_day in available_days:
+            # Fetch the appointments for this specific date
+            appointments_for_day = Appointment.objects.filter(date=available_day.date)
 
+            # Serialize appointments using the AppointmentSerializer
+            serialized_appointments = AppointmentSerializer(appointments_for_day, many=True).data
+
+            # Calculate spots left based on the number of appointments
+            spots_left = max(4 - appointments_for_day.count(), 0)
+
+            # Return the necessary data, including serialized appointments
+            available_day_data = {
+                "date": available_day.date,
+                "type": available_day.type,
+                "spots_left": spots_left,
+                "appointments": serialized_appointments,  # Include serialized appointments
+            }
+            updated_days.append(available_day_data)
+
+        return Response(updated_days)
 
