@@ -93,6 +93,8 @@ class AppointmentListCreate(generics.ListCreateAPIView):
 class AvailableDayListCreate(generics.ListCreateAPIView):
     queryset = AvailableDay.objects.all()
     serializer_class = AvailableDaySerializer
+    permission_classes = [IsAdminOrReadOnly]  # Apply the custom permission class
+
 
     def get(self, request, *args, **kwargs):
         available_days = AvailableDay.objects.all()

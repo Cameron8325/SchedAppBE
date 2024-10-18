@@ -46,18 +46,20 @@ def approve_appointment(request, pk):
         spots_left = 4 - existing_appointments_count
         Appointment.objects.filter(date=date).update(spots_left=spots_left)
 
+        # Determine the recipient email based on whether it's a walk-in or a registered user
+        recipient_email = appointment.walk_in_email if appointment.walk_in_email else appointment.user.email
+
         send_mail(
             'Appointment Confirmed',
             f'Your appointment on {appointment.date} has been confirmed.',
             'your-email@gmail.com',
-            [appointment.user.email],
+            [recipient_email],
             fail_silently=False,
         )
-        serializer = AppointmentSerializer(appointment)
+        serializer = AppointmentSerializer(appointment, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)
     except Appointment.DoesNotExist:
         return Response({'error': 'Appointment not found'}, status=status.HTTP_404_NOT_FOUND)
-
 
 
 @api_view(['POST'])
@@ -65,6 +67,9 @@ def approve_appointment(request, pk):
 def deny_appointment(request, pk):
     try:
         appointment = Appointment.objects.get(pk=pk)
+
+        # Determine the recipient email before deleting the appointment
+        recipient_email = appointment.walk_in_email if appointment.walk_in_email else appointment.user.email
         date = appointment.date
         appointment.delete()
 
@@ -77,7 +82,7 @@ def deny_appointment(request, pk):
             'Appointment Denied',
             f'Your appointment on {date} has been denied.',
             'your-email@gmail.com',
-            [appointment.user.email],
+            [recipient_email],
             fail_silently=False,
         )
 
@@ -91,7 +96,7 @@ def deny_appointment(request, pk):
 def flag_appointment(request, pk):
     try:
         user = request.user
-        reason = request.data.get('reason', '').trim()
+        reason = request.data.get('reason', '').strip()
 
         if user.is_staff or user.is_superuser:
             appointment = Appointment.objects.get(pk=pk)
@@ -106,22 +111,24 @@ def flag_appointment(request, pk):
         appointment.reason = reason
         appointment.save()
 
-        # Notify the appointment's user or admin
+        # Determine the recipient email
+        recipient_email = appointment.walk_in_email if appointment.walk_in_email else appointment.user.email
+
         send_mail(
             'Appointment Flagged',
             f'Your appointment on {appointment.date} has been flagged. Reason: {reason}',
             'admin@example.com',
-            [appointment.user.email] if not user.is_staff else [user.email],
+            [recipient_email],
             fail_silently=False,
         )
 
-        # Optionally update the spots left after flagging (if you want to recalculate based on total appointments)
+        # Optionally update the spots left after flagging
         date = appointment.date
         existing_appointments_count = Appointment.objects.filter(date=date).count()
         spots_left = 4 - existing_appointments_count
         Appointment.objects.filter(date=date).update(spots_left=spots_left)
 
-        serializer = AppointmentSerializer(appointment)
+        serializer = AppointmentSerializer(appointment, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)
     except Appointment.DoesNotExist:
         return Response({'error': 'Appointment not found'}, status=status.HTTP_404_NOT_FOUND)
@@ -136,18 +143,30 @@ def mark_to_completion(request, pk):
             appointment.status = 'to_completion'
             appointment.save()
 
-        profile = appointment.user.profile
-        profile.tokens += 1
-        profile.save()
+        if appointment.user:
+            profile = appointment.user.profile
+            profile.tokens += 1
+            profile.save()
 
-        send_mail(
-            'Appointment Completed',
-            f'Your appointment on {appointment.date} has been marked as completed.',
-            'your-email@gmail.com',
-            [appointment.user.email],
-            fail_silently=False,
-        )
-        serializer = AppointmentSerializer(appointment)
+            # Send email to the registered user
+            send_mail(
+                'Appointment Completed',
+                f'Your appointment on {appointment.date} has been marked as completed.',
+                'your-email@gmail.com',
+                [appointment.user.email],
+                fail_silently=False,
+            )
+        elif appointment.walk_in_email:
+            # Optionally send email to walk-in users
+            send_mail(
+                'Appointment Completed',
+                f'Your appointment on {appointment.date} has been marked as completed.',
+                'your-email@gmail.com',
+                [appointment.walk_in_email],
+                fail_silently=False,
+            )
+
+        serializer = AppointmentSerializer(appointment, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)
     except Appointment.DoesNotExist:
         return Response({'error': 'Appointment not found'}, status=status.HTTP_404_NOT_FOUND)
