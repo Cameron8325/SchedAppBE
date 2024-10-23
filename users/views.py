@@ -26,9 +26,6 @@ from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 
 
-
-
-
 class RegisterView(generics.CreateAPIView):
     """
     API view to handle user registration.
@@ -36,6 +33,49 @@ class RegisterView(generics.CreateAPIView):
     queryset = User.objects.all()
     serializer_class = RegisterSerializer
     permission_classes = [AllowAny]
+
+    def perform_create(self, serializer):
+        user = serializer.save()
+        send_verification_email(user)  # Send verification email after registration
+
+def send_verification_email(user):
+    """
+    Function to send email verification to the user.
+    """
+    token = default_token_generator.make_token(user)
+    uid = urlsafe_base64_encode(force_bytes(user.pk))
+    verification_link = f"http://localhost:3000/verify/{uid}/{token}/"
+
+    subject = "Verify your email address"
+    message = f"Hi {user.username},\nClick the link below to verify your email:\n{verification_link}"
+
+    send_mail(
+        subject,
+        message,
+        settings.EMAIL_HOST_USER,
+        [user.email],  # Use user.email directly
+        fail_silently=False,
+    )
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def verify_email(request, uidb64, token):
+    """
+    View to verify user's email using a token sent in the email.
+    """
+    try:
+        uid = urlsafe_base64_decode(uidb64).decode()
+        user = get_object_or_404(User, pk=uid)
+    except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+        return JsonResponse({'error': 'Invalid link'}, status=400)
+
+    if default_token_generator.check_token(user, token):
+        user.profile.is_verified = True  # Set is_verified to True
+        user.profile.save()
+        return JsonResponse({'message': 'Email verified successfully'}, status=200)
+    else:
+        return JsonResponse({'error': 'Invalid or expired token'}, status=400)
+
 
 @method_decorator(csrf_exempt, name='dispatch')  # Apply csrf_exempt to the dispatch method
 class CookieTokenRefreshView(TokenRefreshView):
@@ -49,18 +89,25 @@ class CookieTokenRefreshView(TokenRefreshView):
                 return Response({'error': 'No refresh token found'}, status=status.HTTP_400_BAD_REQUEST)
         return super().post(request, *args, **kwargs)
 
+
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def login_view(request):
+    """
+    API view to handle user login.
+    """
     username_email = request.data.get('username_email')
     password = request.data.get('password')
     user = User.objects.filter(Q(username=username_email) | Q(email=username_email)).first()
 
     if user and user.check_password(password):
+        if not user.profile.is_verified:
+            return Response({'error': 'Email is not verified.'}, status=status.HTTP_401_UNAUTHORIZED)
+
         refresh = RefreshToken.for_user(user)
-        access_token = str(refresh.access_token)  # Get the access token
-        refresh_token = str(refresh)  # Get the refresh token
-        user_data = UserSerializer(user).data  # Serialize user data
+        access_token = str(refresh.access_token)
+        refresh_token = str(refresh)
+        user_data = UserSerializer(user).data
 
         response = Response({
             'user': user_data,
@@ -72,15 +119,7 @@ def login_view(request):
             key='access_token',
             value=access_token,
             httponly=True,
-            secure=not settings.DEBUG,  # Secure in production (HTTPS only)
-            samesite='Lax'
-        )
-
-        response.set_cookie(
-            key='refresh_token',
-            value=refresh_token,
-            httponly=True,
-            secure=not settings.DEBUG,  # Secure in production (HTTPS only)
+            secure=not settings.DEBUG,
             samesite='Lax'
         )
 
@@ -141,7 +180,7 @@ def user_appointments(request):
 
 
 @api_view(['POST'])
-@permission_classes([AllowAny])  # Password reset does not require authentication
+@permission_classes([AllowAny])
 def password_reset_request(request):
     """
     API view to handle password reset request. Sends a reset email.
@@ -153,14 +192,14 @@ def password_reset_request(request):
             for user in associated_users:
                 subject = "Password Reset Requested"
                 reset_link = f"http://localhost:3000/reset/{urlsafe_base64_encode(force_bytes(user.pk))}/{default_token_generator.make_token(user)}"
-                
+
                 email_content = f"Hi {user.username},\nClick the link below to reset your password:\n{reset_link}\nIf you did not request this, please ignore this email."
-                
+
                 send_mail(
                     subject,
                     email_content,
                     settings.EMAIL_HOST_USER,
-                    [user.email],
+                    [user.email],  # Use user.email directly
                     fail_silently=False,
                 )
             return Response({'message': 'Password reset email sent'}, status=status.HTTP_200_OK)
@@ -233,11 +272,10 @@ def account_deletion_request(request):
         subject,
         email_content,
         settings.EMAIL_HOST_USER,
-        [user.email],
+        [user.email],  # Use user.email directly
         fail_silently=False,
     )
 
-    # Add this return statement
     return Response({'message': 'Account deletion email sent'}, status=status.HTTP_200_OK)
 
 
