@@ -15,12 +15,14 @@ from .views import (
     account_deletion_request,
     account_deletion_confirm,
     send_verification_email,
-    verify_email
+    verify_email,
+    resend_verification_email
 )
 
 urlpatterns = [
     path('register/', RegisterView.as_view(), name='register'),
     path('send-verification-email/', send_verification_email, name='send_verification_email'),
+    path('resend-verification-email/', resend_verification_email, name='resend_verification_email'),
     path('verify/<uidb64>/<token>/', verify_email, name='verify_email'),
     path('login/', login_view, name='login'),
     path('logout/', logout_view, name='logout'),

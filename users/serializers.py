@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
 from .models import Profile
+from django.db import transaction
 
 class ProfileSerializer(serializers.ModelSerializer):
     class Meta:
@@ -35,10 +36,11 @@ class RegisterSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Passwords do not match")
         return data
 
+    @transaction.atomic
     def create(self, validated_data):
         validated_data.pop('password_confirm')
         phone_number = validated_data.pop('phone_number')
-        
+
         # Create a new User instance
         user = User.objects.create_user(
             username=validated_data['username'],
@@ -47,10 +49,11 @@ class RegisterSerializer(serializers.ModelSerializer):
             first_name=validated_data.get('first_name', ''),
             last_name=validated_data.get('last_name', '')
         )
-        
-        # Update the automatically created Profile instance
-        user.profile.phone_number = phone_number
-        user.profile.is_verified = False
-        user.profile.save()
-        
+
+        # Ensure the Profile exists and update it
+        profile, created = Profile.objects.get_or_create(user=user)
+        profile.phone_number = phone_number
+        profile.is_verified = False
+        profile.save()
+
         return user
