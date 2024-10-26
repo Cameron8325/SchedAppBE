@@ -16,7 +16,8 @@ from .views import (
     account_deletion_confirm,
     send_verification_email,
     verify_email,
-    resend_verification_email
+    resend_verification_email,
+    update_user
 )
 
 urlpatterns = [
@@ -35,4 +36,5 @@ urlpatterns = [
     path('check-superuser/', check_superuser, name='check-superuser'),
     path('set-csrf/', ensure_csrf_cookie(set_csrf), name='set_csrf'),
     path('token/refresh/', CookieTokenRefreshView.as_view(), name='token_refresh'),
+    path('update/', update_user, name='update_user'),
 ]

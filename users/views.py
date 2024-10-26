@@ -346,3 +346,46 @@ def account_deletion_confirm(request, uidb64, token):
 
     return Response({'message': 'Account deleted successfully'}, status=status.HTTP_200_OK)
 
+
+@api_view(['PUT'])
+@permission_classes([permissions.IsAuthenticated])
+def update_user(request):
+    user = request.user
+    data = request.data
+    with transaction.atomic():
+        try:
+            updated_fields = {}
+
+            # Update basic user fields
+            if 'first_name' in data and data['first_name'] != user.first_name:
+                user.first_name = data['first_name']
+                updated_fields['first_name'] = data['first_name']
+            
+            if 'last_name' in data and data['last_name'] != user.last_name:
+                user.last_name = data['last_name']
+                updated_fields['last_name'] = data['last_name']
+
+            if 'email' in data and data['email'] != user.email:
+                user.email = data['email']
+                updated_fields['email'] = data['email']
+
+            if 'username' in data and data['username'] != user.username:
+                user.username = data['username']
+                updated_fields['username'] = data['username']
+
+            # Handle Profile updates (e.g., phone number)
+            if 'profile' in data and 'phone_number' in data['profile']:
+                profile, _ = Profile.objects.get_or_create(user=user)
+                if data['profile']['phone_number'] != profile.phone_number:
+                    profile.phone_number = data['profile']['phone_number']
+                    updated_fields['profile_phone_number'] = data['profile']['phone_number']
+                    profile.save()  # Save profile changes
+
+            # Save user changes and serialize response
+            user.save()
+            serializer = UserSerializer(user)
+            return Response({'user': serializer.data, 'updated_fields': updated_fields}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({'error': 'Failed to update profile.', 'details': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+      
